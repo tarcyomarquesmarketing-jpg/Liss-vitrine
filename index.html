@@ -41,6 +41,13 @@
   .fprice{font-size:26px;font-weight:700;margin:0 0 18px;color:var(--coral)}
   .fcta{font-size:14px;color:#fff;font-weight:600;background:var(--coral);align-self:flex-start;padding:9px 20px;border-radius:24px}
 
+  .cupom-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(100deg,#fff5f4,#fdeceb);border:1px solid #f6d4d1;border-radius:16px;padding:16px 22px;margin-bottom:22px}
+  .cupom-title{font-size:16px;font-weight:700;margin:0 0 2px;color:var(--coral-dark)}
+  .cupom-sub{font-size:13px;color:#8a6f6c;margin:0}
+  .cupom-btn{background:var(--coral);color:#fff;border:none;border-radius:24px;padding:11px 22px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .cupom-btn:hover{background:var(--coral-dark)}
+  .ok-box{text-align:center;padding:10px 4px}
+  .ok-emoji{font-size:44px;margin-bottom:6px}
   .controls{display:flex;flex-direction:column;gap:12px;margin-bottom:22px}
   .search{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line2);border-radius:24px;padding:0 16px}
   .search input{flex:1;border:none;outline:none;padding:12px 0;font-size:15px;background:none;color:var(--ink)}
@@ -162,7 +169,7 @@ const SIZES = ["PP","P","M","G","GG","36","38","40","42","44","46"];
 const brl = n => (Number(n)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-let state = { products:[], view:"shop", isAdmin:false, q:"", cat:"Todas", selected:null, editing:null, tab:"products", loading:true };
+let state = { products:[], clientes:null, view:"shop", isAdmin:false, q:"", cat:"Todas", selected:null, editing:null, tab:"products", loading:true };
 const app = document.getElementById("app");
 
 function toast(msg){
@@ -209,6 +216,29 @@ async function uploadImage(file){
   const { data }=sb.storage.from("fotos").getPublicUrl(name);
   return data.publicUrl;
 }
+async function saveCliente(c){
+  if(!sb) return { ok:false };
+  const { error }=await sb.from("clientes").insert(c);
+  if(error){ console.error(error); return { ok:false, error }; }
+  return { ok:true };
+}
+async function loadClientes(){
+  if(!sb) return [];
+  const { data, error }=await sb.from("clientes").select("*").order("criado_em",{ascending:false});
+  if(error){ console.error(error); toast("Erro ao carregar clientes"); return []; }
+  return data||[];
+}
+function exportCSV(rows){
+  const cols=["criado_em","nome","email","telefone","busca","cidade","bairro","endereco"];
+  const head=["Data","Nome","E-mail","Telefone","Busca","Cidade","Bairro","Endereço"];
+  const cell=v=>`"${String(v==null?"":v).replace(/"/g,'""')}"`;
+  const lines=[head.join(",")];
+  rows.forEach(r=>lines.push(cols.map(c=>cell(c==="criado_em"&&r[c]?new Date(r[c]).toLocaleString("pt-BR"):r[c])).join(",")));
+  const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="clientes-liss.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
 
 /* ---------- Render principal ------------------------------------- */
 function render(){
@@ -246,6 +276,13 @@ function shop(){
     .filter(p=>{ if(!state.q.trim())return true; const t=(p.name+" "+(p.ref||"")+" "+(p.category||"")).toLowerCase(); return t.includes(state.q.toLowerCase()); });
 
   let h=`<main>`;
+  h+=`<div class="cupom-cta">
+      <div class="cupom-txt">
+        <p class="cupom-title">🎟️ Ganhe cupons de desconto</p>
+        <p class="cupom-sub">Cadastre-se e receba as promoções da Liss em primeira mão.</p>
+      </div>
+      <button class="cupom-btn" id="open-cupom">Quero receber cupons</button>
+    </div>`;
   if(featured && state.cat==="Todas" && !state.q){
     const img=(featured.images||[])[0];
     h+=`<div class="featured" data-open="${featured.id}">
@@ -332,6 +369,67 @@ function openModal(p){
   draw();
 }
 
+/* ---------- Cadastro de cupons ----------------------------------- */
+function openCupom(){
+  const ov=document.createElement("div"); ov.className="overlay";
+  const opts=["Não sei ainda",...CONFIG.categories];
+  ov.innerHTML=`<div class="modal sm">
+    <button class="mclose">✕</button>
+    <div style="padding:24px 26px 26px">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:32px">🎟️</div>
+        <h2 style="font-size:20px;font-weight:600;margin:6px 0 2px">Receber cupons de desconto</h2>
+        <p style="font-size:13px;color:var(--muted);margin:0">Preencha para participar das campanhas da Liss.</p>
+      </div>
+      <div class="fgrid">
+        <div style="grid-column:span 2"><p class="flabel">Nome completo *</p><input class="input" id="c_nome"></div>
+        <div><p class="flabel">E-mail</p><input class="input" id="c_email" type="email" placeholder="voce@email.com"></div>
+        <div><p class="flabel">Telefone *</p><input class="input" id="c_tel" inputmode="tel" placeholder="(81) 9....."></div>
+        <div style="grid-column:span 2"><p class="flabel">Que tipo de peça você busca?</p><select class="input" id="c_busca">${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></div>
+        <div><p class="flabel">Cidade</p><input class="input" id="c_cidade" value="Recife"></div>
+        <div><p class="flabel">Bairro</p><input class="input" id="c_bairro"></div>
+        <div style="grid-column:span 2"><p class="flabel">Endereço</p><input class="input" id="c_end" placeholder="Rua, número, complemento"></div>
+      </div>
+      <p class="err" id="c_err" style="display:none"></p>
+      <button class="pbtn" id="c_save" style="margin-top:6px">Quero meus cupons</button>
+      <p class="mhint">* Nome e telefone são obrigatórios. Seus dados são usados só para enviar as promoções da Liss.</p>
+    </div></div>`;
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  ov.querySelector(".mclose").onclick=close;
+  ov.querySelector("#c_save").onclick=async()=>{
+    const err=ov.querySelector("#c_err");
+    const nome=ov.querySelector("#c_nome").value.trim();
+    const tel=ov.querySelector("#c_tel").value.trim();
+    if(!nome){ err.textContent="Por favor, informe seu nome."; err.style.display="block"; return; }
+    if(!tel){ err.textContent="Por favor, informe seu telefone."; err.style.display="block"; return; }
+    err.style.display="none";
+    const btn=ov.querySelector("#c_save"); btn.disabled=true; btn.textContent="Enviando…";
+    const res=await saveCliente({
+      nome, telefone:tel,
+      email:ov.querySelector("#c_email").value.trim(),
+      busca:ov.querySelector("#c_busca").value,
+      cidade:ov.querySelector("#c_cidade").value.trim(),
+      bairro:ov.querySelector("#c_bairro").value.trim(),
+      endereco:ov.querySelector("#c_end").value.trim()
+    });
+    if(res.ok){
+      ov.querySelector(".modal").innerHTML=`<button class="mclose">✕</button>
+        <div style="padding:34px 28px" class="ok-box">
+          <div class="ok-emoji">🎉</div>
+          <h2 style="font-size:21px;font-weight:600;margin:0 0 6px">Cadastro concluído!</h2>
+          <p style="color:#6b625a;font-size:14px;line-height:1.6;margin:0">Prontinho, ${esc(nome.split(" ")[0])}! Você vai receber os cupons e novidades da Liss assim que houver campanha. 💛</p>
+          <button class="pbtn auto" style="margin:18px auto 0">Fechar</button>
+        </div>`;
+      ov.querySelectorAll(".mclose,.pbtn").forEach(b=>b.onclick=close);
+    } else {
+      btn.disabled=false; btn.textContent="Quero meus cupons";
+      err.textContent="Não deu para enviar agora. Tente de novo em instantes."; err.style.display="block";
+    }
+  };
+  document.body.appendChild(ov);
+}
+
 /* ---------- Login ------------------------------------------------ */
 function login(){
   return `<main><div class="login">
@@ -350,6 +448,7 @@ function admin(){
   let h=`<main>
     <div class="tabs">
       <button class="tab ${state.tab==="products"?"on":""}" data-tab="products">Peças (${state.products.length})</button>
+      <button class="tab ${state.tab==="clientes"?"on":""}" data-tab="clientes">Clientes${state.clientes?` (${state.clientes.length})`:""}</button>
       <button class="tab ${state.tab==="settings"?"on":""}" data-tab="settings">Ajuda</button>
     </div>`;
   if(state.tab==="products"){
@@ -373,11 +472,31 @@ function admin(){
           </div></div>`;
       }).join("");
     }
+  } else if(state.tab==="clientes"){
+    if(!state.clientes){
+      h+=`<div class="empty">⏳<p class="t">Carregando cadastros…</p></div>`;
+    } else if(state.clientes.length===0){
+      h+=`<div class="empty">📇<p class="t">Nenhum cadastro ainda</p><p>Quando clientes se cadastrarem para cupons, aparecem aqui.</p></div>`;
+    } else {
+      h+=`<div class="abar"><p style="font-size:14px;color:var(--muted);margin:0">${state.clientes.length} cliente(s) cadastrado(s) para cupons.</p>
+          <button class="pbtn auto" id="csv">⬇ Baixar CSV</button></div>`;
+      h+=state.clientes.map(c=>`<div class="arow">
+          <div style="flex:1;min-width:0">
+            <p class="aname">${esc(c.nome)}</p>
+            <p class="ameta">${esc(c.telefone||"")}${c.email?" · "+esc(c.email):""}${c.busca?" · busca: "+esc(c.busca):""}</p>
+            <p class="ameta">${[c.bairro,c.cidade].filter(Boolean).map(esc).join(", ")}${c.endereco?" · "+esc(c.endereco):""}</p>
+          </div>
+          <div style="flex-shrink:0;text-align:right">
+            <a class="icon" href="https://wa.me/55${(c.telefone||"").replace(/\D/g,"")}" target="_blank" title="WhatsApp">💬</a>
+            <p class="ameta" style="margin:4px 0 0">${c.criado_em?new Date(c.criado_em).toLocaleDateString("pt-BR"):""}</p>
+          </div></div>`).join("");
+    }
   } else {
     h+=`<div class="card-pad" style="font-size:14px;line-height:1.7;color:#514840">
       <p style="margin-top:0"><b>Como adicionar uma peça:</b> vá em “Peças” → “Nova peça”, preencha nome e preço, envie as fotos e salve. Ela aparece na hora na vitrine.</p>
       <p><b>Marcar destaque:</b> a peça marcada como destaque aparece no topo da vitrine.</p>
       <p><b>Esgotou?</b> edite a peça e mude o estoque para “Esgotado” — ela continua visível, mas sem o botão de WhatsApp.</p>
+      <p><b>Cupons / clientes:</b> na aba “Clientes” ficam todos que se cadastraram pelo botão de cupons da vitrine. Use “Baixar CSV” para exportar a lista (abre no Excel) e disparar suas campanhas.</p>
       <p style="margin-bottom:0;color:var(--muted)">As configurações da loja (WhatsApp, PIN, nome) ficam no código do site, no bloco CONFIG. Para alterar, me chame que eu ajusto.</p>
     </div>`;
   }
@@ -460,6 +579,7 @@ function bind(){
   const lo=document.querySelector("[data-logout]"); if(lo) lo.onclick=()=>{ state.isAdmin=false; state.view="shop"; render(); };
   const q=document.getElementById("q"); if(q) q.oninput=e=>{ state.q=e.target.value; const g=document.querySelector(".grid")||document.querySelector(".empty"); softShop(); };
   document.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{ state.cat=b.dataset.cat; render(); });
+  const oc=document.getElementById("open-cupom"); if(oc) oc.onclick=openCupom;
   document.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>{ const p=state.products.find(x=>x.id===b.dataset.open); if(p){ state.selected=p; openModal(p);} });
 
   const enter=document.getElementById("enter");
@@ -468,7 +588,12 @@ function bind(){
     enter.onclick=go;
     document.getElementById("pin").onkeydown=e=>{ if(e.key==="Enter")go(); };
   }
-  document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{ state.tab=b.dataset.tab; render(); });
+  document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=async()=>{
+    state.tab=b.dataset.tab;
+    if(state.tab==="clientes"){ state.clientes=null; render(); state.clientes=await loadClientes(); render(); }
+    else render();
+  });
+  const csv=document.getElementById("csv"); if(csv) csv.onclick=()=>{ if(state.clientes&&state.clientes.length) exportCSV(state.clientes); };
   const nw=document.getElementById("new"); if(nw) nw.onclick=()=>{ state.editing="new"; openForm(); };
   document.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{ state.editing=state.products.find(x=>x.id===b.dataset.edit); openForm(); });
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>deleteProduct(b.dataset.del));
