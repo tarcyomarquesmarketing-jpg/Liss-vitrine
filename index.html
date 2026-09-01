@@ -229,11 +229,15 @@ async function loadClientes(){
   return data||[];
 }
 function exportCSV(rows){
-  const cols=["criado_em","nome","email","telefone","busca","cidade","bairro","endereco"];
-  const head=["Data","Nome","E-mail","Telefone","Busca","Cidade","Bairro","Endereço"];
+  const cols=["criado_em","nome","email","telefone","nascimento","busca","cidade","bairro","endereco"];
+  const head=["Data","Nome","E-mail","Telefone","Nascimento","Busca","Cidade","Bairro","Endereço"];
   const cell=v=>`"${String(v==null?"":v).replace(/"/g,'""')}"`;
   const lines=[head.join(",")];
-  rows.forEach(r=>lines.push(cols.map(c=>cell(c==="criado_em"&&r[c]?new Date(r[c]).toLocaleString("pt-BR"):r[c])).join(",")));
+  rows.forEach(r=>lines.push(cols.map(c=>{
+    if(c==="criado_em"&&r[c]) return cell(new Date(r[c]).toLocaleString("pt-BR"));
+    if(c==="nascimento"&&r[c]) return cell(new Date(r[c]+"T00:00:00").toLocaleDateString("pt-BR"));
+    return cell(r[c]);
+  }).join(",")));
   const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a"); a.href=url; a.download="clientes-liss.csv"; a.click();
@@ -385,6 +389,7 @@ function openCupom(){
         <div style="grid-column:span 2"><p class="flabel">Nome completo *</p><input class="input" id="c_nome"></div>
         <div><p class="flabel">E-mail</p><input class="input" id="c_email" type="email" placeholder="voce@email.com"></div>
         <div><p class="flabel">Telefone *</p><input class="input" id="c_tel" inputmode="tel" placeholder="(81) 9....."></div>
+        <div><p class="flabel">Data de nascimento</p><input class="input" id="c_nasc" type="date"></div>
         <div style="grid-column:span 2"><p class="flabel">Que tipo de peça você busca?</p><select class="input" id="c_busca">${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></div>
         <div><p class="flabel">Cidade</p><input class="input" id="c_cidade" value="Recife"></div>
         <div><p class="flabel">Bairro</p><input class="input" id="c_bairro"></div>
@@ -408,6 +413,7 @@ function openCupom(){
     const res=await saveCliente({
       nome, telefone:tel,
       email:ov.querySelector("#c_email").value.trim(),
+      nascimento:ov.querySelector("#c_nasc").value||null,
       busca:ov.querySelector("#c_busca").value,
       cidade:ov.querySelector("#c_cidade").value.trim(),
       bairro:ov.querySelector("#c_bairro").value.trim(),
@@ -484,7 +490,7 @@ function admin(){
           <div style="flex:1;min-width:0">
             <p class="aname">${esc(c.nome)}</p>
             <p class="ameta">${esc(c.telefone||"")}${c.email?" · "+esc(c.email):""}${c.busca?" · busca: "+esc(c.busca):""}</p>
-            <p class="ameta">${[c.bairro,c.cidade].filter(Boolean).map(esc).join(", ")}${c.endereco?" · "+esc(c.endereco):""}</p>
+            <p class="ameta">${[c.bairro,c.cidade].filter(Boolean).map(esc).join(", ")}${c.endereco?" · "+esc(c.endereco):""}${c.nascimento?" · nasc: "+new Date(c.nascimento+"T00:00:00").toLocaleDateString("pt-BR"):""}</p>
           </div>
           <div style="flex-shrink:0;text-align:right">
             <a class="icon" href="https://wa.me/55${(c.telefone||"").replace(/\D/g,"")}" target="_blank" title="WhatsApp">💬</a>
