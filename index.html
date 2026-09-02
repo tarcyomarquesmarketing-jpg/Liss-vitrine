@@ -67,6 +67,7 @@
   .cname{font-size:14px;font-weight:500;margin:0 0 2px;line-height:1.3}
   .cref{font-size:12px;color:var(--muted);margin:0 0 7px}
   .cprice{font-size:17px;font-weight:700;margin:0;color:var(--coral)}
+  .preco-antigo{text-decoration:line-through;color:#b0aaa4;font-weight:500;font-size:.82em;margin-right:6px}
 
   .overlay{position:fixed;inset:0;background:rgba(50,44,40,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
   .modal{background:#fff;border-radius:18px;width:100%;max-width:780px;max-height:90vh;overflow:auto;position:relative}
@@ -178,6 +179,8 @@ const sb = (SUPABASE_URL.startsWith("http"))
 
 const SIZES = ["PP","P","M","G","GG","36","38","40","42","44","46"];
 const brl = n => (Number(n)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const emPromo = p => p.precoPromo!=null && p.precoPromo!=="" && Number(p.precoPromo) < Number(p.price);
+const precoFinal = p => emPromo(p) ? Number(p.precoPromo) : Number(p.price);
 const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 let state = { products:[], clientes:null, view:"shop", isAdmin:false, q:"", cat:"Todas", selected:null, editing:null, tab:"products", loading:true };
@@ -196,14 +199,14 @@ async function loadProducts(){
   state.products = (data||[]).map(r=>({
     id:r.id, name:r.nome, ref:r.ref, price:r.preco, category:r.categoria,
     description:r.descricao, sizes:r.tamanhos||[], colors:r.cores||[],
-    images:r.imagens||[], featured:r.destaque, stock:r.estoque, selo:r.selo||""
+    images:r.imagens||[], featured:r.destaque, stock:r.estoque, selo:r.selo||"", precoPromo:r.preco_promo
   }));
   state.loading=false;
 }
 function toRow(p){
   return { nome:p.name, ref:p.ref, preco:Number(p.price)||0, categoria:p.category,
     descricao:p.description, tamanhos:p.sizes||[], cores:p.colors||[],
-    imagens:p.images||[], destaque:!!p.featured, estoque:p.stock||"disponivel", selo:p.selo||null };
+    imagens:p.images||[], destaque:!!p.featured, estoque:p.stock||"disponivel", selo:p.selo||null, preco_promo:(p.precoPromo===""||p.precoPromo==null||isNaN(Number(p.precoPromo)))?null:Number(p.precoPromo) };
 }
 async function saveProduct(p){
   if(!sb) return toast("Configure o Supabase primeiro");
@@ -306,7 +309,7 @@ function shop(){
         <span class="ftag">★ Destaque da semana</span>
         <h2 class="ftitle">${esc(featured.name)}</h2>
         ${featured.ref?`<p class="fref">Ref: ${esc(featured.ref)}</p>`:""}
-        <p class="fprice">${brl(featured.price)}</p>
+        <p class="fprice">${emPromo(featured)?`<span class="preco-antigo">${brl(featured.price)}</span>`:""}${brl(precoFinal(featured))}</p>
         <span class="fcta">Ver detalhes</span>
       </div></div>`;
   }
@@ -334,7 +337,7 @@ function card(p){
     <div class="cbody">
       <p class="cname">${esc(p.name)}</p>
       ${p.ref?`<p class="cref">Ref: ${esc(p.ref)}</p>`:""}
-      <p class="cprice">${brl(p.price)}</p>
+      <p class="cprice">${emPromo(p)?`<span class="preco-antigo">${brl(p.price)}</span>`:""}${brl(precoFinal(p))}</p>
     </div></button>`;
 }
 
@@ -347,7 +350,7 @@ function openModal(p){
     const img=imgs[modalIdx];
     const wa=`https://wa.me/${CONFIG.whatsapp}?text=`+encodeURIComponent(
       `Olá ${CONFIG.seller}! Vi na vitrine da Liss e tenho interesse:\n\n*${p.name}*`+
-      (p.ref?`\nRef: ${p.ref}`:"")+`\nPreço: ${brl(p.price)}\n\nEstá disponível?`);
+      (p.ref?`\nRef: ${p.ref}`:"")+`\nPreço: ${brl(precoFinal(p))}${emPromo(p)?" (promoção, de "+brl(p.price)+")":""}\n\nEstá disponível?`);
     const ov=document.createElement("div"); ov.className="overlay";
     ov.innerHTML=`<div class="modal">
       <button class="mclose">✕</button>
@@ -363,7 +366,7 @@ function openModal(p){
           ${p.category?`<span class="mcat">${esc(p.category)}</span>`:""}
           <h2 class="mtitle">${esc(p.name)}</h2>
           ${p.ref?`<p class="mref">Ref: ${esc(p.ref)}</p>`:""}
-          <p class="mprice">${brl(p.price)}</p>
+          <p class="mprice">${emPromo(p)?`<span class="preco-antigo">${brl(p.price)}</span>`:""}${brl(precoFinal(p))}</p>
           ${p.description?`<p class="mdesc">${esc(p.description)}</p>`:""}
           ${p.sizes&&p.sizes.length?`<div style="margin-top:14px"><p class="mlabel">Tamanhos</p><div class="tags">${p.sizes.map(s=>`<span class="tag">${esc(s)}</span>`).join("")}</div></div>`:""}
           ${p.colors&&p.colors.length?`<div style="margin-top:14px"><p class="mlabel">Cores</p><div class="tags">${p.colors.map(c=>`<span class="tag">${esc(c)}</span>`).join("")}</div></div>`:""}
@@ -482,7 +485,7 @@ function admin(){
           <div class="athumb">${img?`<img src="${img}" style="width:100%;height:100%;object-fit:cover">`:""}</div>
           <div style="flex:1;min-width:0">
             <p class="aname">${esc(p.name)||"Sem nome"} ${p.featured?"★":""}</p>
-            <p class="ameta">${esc(p.category||"")} · ${brl(p.price)}${p.ref?" · Ref "+esc(p.ref):""}${p.stock==="esgotado"?" · Esgotado":""}</p>
+            <p class="ameta">${esc(p.category||"")} · ${emPromo(p)?brl(precoFinal(p))+" (de "+brl(p.price)+")":brl(p.price)}${p.ref?" · Ref "+esc(p.ref):""}${p.stock==="esgotado"?" · Esgotado":""}</p>
           </div>
           <div style="display:flex;gap:2px;flex-shrink:0">
             <button class="icon" data-dup="${p.id}" title="Duplicar">⧉</button>
@@ -543,6 +546,7 @@ function openForm(){
         <div style="grid-column:span 2"><p class="flabel">Nome</p><input class="input" id="f_name" value="${esc(p.name)}" placeholder="Calça Reta Média"></div>
         <div><p class="flabel">Referência</p><input class="input" id="f_ref" value="${esc(p.ref||"")}" placeholder="1765194"></div>
         <div><p class="flabel">Preço (R$)</p><input class="input" id="f_price" value="${p.price}" placeholder="159.90" inputmode="decimal"></div>
+        <div><p class="flabel">Preço promocional (opcional)</p><input class="input" id="f_promo" value="${p.precoPromo!=null?p.precoPromo:""}" placeholder="119.90" inputmode="decimal"></div>
         <div><p class="flabel">Categoria</p><select class="input" id="f_cat">${CONFIG.categories.map(c=>`<option ${c===p.category?"selected":""}>${esc(c)}</option>`).join("")}</select></div>
         <div><p class="flabel">Estoque</p><select class="input" id="f_stock"><option value="disponivel" ${p.stock!=="esgotado"?"selected":""}>Disponível</option><option value="esgotado" ${p.stock==="esgotado"?"selected":""}>Esgotado</option></select></div>
         <div><p class="flabel">Selo (destaque especial)</p><select class="input" id="f_selo"><option value="">Nenhum</option>${Object.entries(SELOS).map(([k,v])=>`<option value="${k}" ${p.selo===k?"selected":""}>${esc(v.label)}</option>`).join("")}</select></div>
@@ -583,7 +587,7 @@ function openForm(){
     if(priceRaw===""||isNaN(Number(priceRaw))){ err.textContent="Informe um preço válido."; err.style.display="block"; return; }
     const prod={
       id: isNew?undefined:state.editing.id, name, ref:ov.querySelector("#f_ref").value.trim(),
-      price:Number(priceRaw), category:ov.querySelector("#f_cat").value,
+      price:Number(priceRaw), precoPromo:ov.querySelector("#f_promo").value.replace(",","."), category:ov.querySelector("#f_cat").value,
       description:ov.querySelector("#f_desc").value, stock:ov.querySelector("#f_stock").value,
       selo:ov.querySelector("#f_selo").value,
       colors:ov.querySelector("#f_colors").value.split(",").map(s=>s.trim()).filter(Boolean),
