@@ -170,7 +170,7 @@ const CONFIG = {
   storeName: "Liss",
   seller:    "Elisângela",
   whatsapp:  "5581999205354",   // só números, com 55
-  adminPin:  "1234",            // PIN do painel
+  adminPin:  "4512v",            // PIN do painel
   blackFriday: true,            // ativa a faixa e o clima de Black Friday (false = layout normal)
   bfDate:    "2026-11-27T00:00:00-03:00",
   categories:["Calças","Blusas","Vestidos","Shorts","Moda Fitness","Acessórios"],
@@ -490,7 +490,7 @@ function login(){
     <img src="${LOGO}" alt="Liss">
     <h2 style="font-size:20px;font-weight:600;margin:0 0 2px">Painel da vendedora</h2>
     <p style="font-size:14px;color:var(--muted);margin:0 0 18px">Digite o PIN para gerenciar as peças.</p>
-    <input class="input" id="pin" type="password" inputmode="numeric" placeholder="PIN">
+    <input class="input" id="pin" type="password" inputmode="text" autocomplete="off" placeholder="PIN">
     <p class="err" id="pinerr" style="display:none">PIN incorreto.</p>
     <button class="pbtn" id="enter" style="margin-top:10px">Entrar</button>
     <button class="tbtn" data-go="shop">Voltar à vitrine</button>
